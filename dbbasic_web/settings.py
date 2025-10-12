@@ -2,8 +2,16 @@
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BASE_DIR.parent
+# Allow override from environment or use current working directory if api/ exists
+_cwd = Path.cwd()
+if (_cwd / "api").exists() or (_cwd / "templates").exists():
+    # Running from a project directory
+    BASE_DIR = _cwd
+    PROJECT_ROOT = _cwd.parent
+else:
+    # Running from installed package (fallback)
+    BASE_DIR = Path(__file__).resolve().parent
+    PROJECT_ROOT = BASE_DIR.parent
 
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
