@@ -100,6 +100,12 @@ events.addEventListener('tick', (e) => console.log(e.data));
 ### Installation
 
 ```bash
+pip install dbbasic-web
+```
+
+Or install from source:
+```bash
+git clone https://github.com/askrobots/dbbasic-web.git
 cd dbbasic-web
 pip install -e .
 ```
