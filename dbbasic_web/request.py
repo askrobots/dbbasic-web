@@ -12,6 +12,7 @@ class Request(dict):
         request['cookies'] -> request.COOKIES
 
     Philosophy: PHP-style explicit data sources (no magic merging)
+    Plus: Perl-style convenience with param() method
     """
 
     @property
@@ -48,3 +49,37 @@ class Request(dict):
     def path(self) -> str:
         """Full request path"""
         return self.get('path', '/')
+
+    def param(self, key: str, default=None):
+        """
+        Get parameter from POST form data first, then GET query string.
+
+        Perl CGI.pm-style convenience method. Explicit lookup order:
+        1. POST form data (request.POST)
+        2. GET query string (request.GET)
+
+        Example:
+            email = request.param('email')  # Checks POST, then GET
+            page = request.param('page', '1')  # With default
+
+        This is explicit and documented - not magic!
+        """
+        # Check POST first (form data)
+        if key in self.POST:
+            return self.POST[key]
+
+        # Then check GET (query string)
+        if key in self.GET:
+            return self.GET[key]
+
+        # Return default if not found
+        return default
+
+    def cookie(self, key: str, default=None):
+        """
+        Get cookie value.
+
+        Example:
+            session = request.cookie('session')
+        """
+        return self.COOKIES.get(key, default)
