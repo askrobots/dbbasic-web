@@ -25,8 +25,19 @@ async def http_handler(scope, receive, send):
         await sse_counter(scope, receive, send)
         return
 
+    # Read request body for POST/PUT requests
+    body = b""
+    while True:
+        message = await receive()
+        if message["type"] == "http.request":
+            body += message.get("body", b"")
+            if not message.get("more_body", False):
+                break
+        elif message["type"] == "http.disconnect":
+            return
+
     # Normal routing through filesystem router
-    status, headers, body_parts = route(scope)
+    status, headers, body_parts = route(scope, body)
 
     # Convert to ASGI format
     headers_asgi = [(k.encode() if isinstance(k, str) else k,

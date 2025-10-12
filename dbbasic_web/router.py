@@ -15,7 +15,42 @@ def parse_query_string(query_string: str) -> dict:
     return dict(urllib.parse.parse_qsl(query_string))
 
 
-def route(scope: dict) -> tuple[int, list, list]:
+def parse_form_data(body: bytes, content_type: str) -> dict:
+    """Parse form data from request body"""
+    if not body:
+        return {}
+
+    # Handle application/x-www-form-urlencoded
+    if "application/x-www-form-urlencoded" in content_type:
+        return dict(urllib.parse.parse_qsl(body.decode("utf-8")))
+
+    # Handle multipart/form-data (requires python-multipart)
+    if "multipart/form-data" in content_type:
+        try:
+            from multipart import parse_form_data as parse_multipart
+            # TODO: Implement multipart parsing
+            return {}
+        except ImportError:
+            return {}
+
+    return {}
+
+
+def parse_cookies(headers: list) -> dict:
+    """Parse cookies from request headers"""
+    cookies = {}
+    for name, value in headers:
+        if name.lower() == b"cookie":
+            cookie_str = value.decode("utf-8") if isinstance(value, bytes) else value
+            for cookie in cookie_str.split(";"):
+                cookie = cookie.strip()
+                if "=" in cookie:
+                    key, val = cookie.split("=", 1)
+                    cookies[key.strip()] = val.strip()
+    return cookies
+
+
+def route(scope: dict, body: bytes = b"") -> tuple[int, list, list]:
     """
     Route a request based on filesystem conventions.
 
@@ -31,6 +66,14 @@ def route(scope: dict) -> tuple[int, list, list]:
     method = scope["method"]
     path = scope["path"]
     query_string = scope.get("query_string", b"").decode("utf-8")
+    headers = scope.get("headers", [])
+
+    # Get content type for form parsing
+    content_type = ""
+    for name, value in headers:
+        if name.lower() == b"content-type":
+            content_type = value.decode("utf-8") if isinstance(value, bytes) else value
+            break
 
     # Clean path
     clean_path = path.strip("/")
@@ -42,6 +85,9 @@ def route(scope: dict) -> tuple[int, list, list]:
         "path": path,
         "path_parts": path_parts,
         "query": parse_query_string(query_string),
+        "form": parse_form_data(body, content_type),
+        "cookies": parse_cookies(headers),
+        "body": body,
         "scope": scope,
     }
 
