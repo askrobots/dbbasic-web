@@ -6,6 +6,7 @@ from .settings import BASE_DIR
 from .responses import html, text
 from .templating import render
 from .static import serve_static
+from .request import Request
 
 
 def parse_query_string(query_string: str) -> dict:
@@ -80,7 +81,7 @@ def route(scope: dict, body: bytes = b"") -> tuple[int, list, list]:
     path_parts = [p for p in clean_path.split("/") if p] if clean_path else []
 
     # Build request context
-    request = {
+    request = Request({
         "method": method,
         "path": path,
         "path_parts": path_parts,
@@ -89,7 +90,7 @@ def route(scope: dict, body: bytes = b"") -> tuple[int, list, list]:
         "cookies": parse_cookies(headers),
         "body": body,
         "scope": scope,
-    }
+    })
 
     # 1. Try API handlers (with hierarchical fallback)
     api_result = try_api_handler(path_parts, request)
