@@ -20,6 +20,37 @@ def json(body: bytes | str, status: int = 200, headers: list[tuple[str, str]] | 
     return status, h, [b]
 
 
+def json_error(message: str, status: int = 404):
+    """
+    Return JSON error response.
+
+    Convenience helper that reduces verbose error handling:
+
+    Before:
+        import json as json_lib
+        return json(json_lib.dumps({"error": "User not found"}), status=404)
+
+    After:
+        return json_error("User not found", status=404)
+
+    Example:
+        from dbbasic_web.responses import json_error
+
+        def handle(request):
+            user_id = request.path_param(1)
+            if not user_id:
+                return json_error("User ID required", status=400)
+
+            user = get_user(user_id)
+            if not user:
+                return json_error("User not found", status=404)
+
+            return json(...)
+    """
+    import json as json_lib
+    return json(json_lib.dumps({"error": message}), status=status)
+
+
 def text(s: str, status: int = 200):
     """Return plain text response"""
     return status, [("content-type", "text/plain; charset=utf-8")], [s.encode("utf-8")]

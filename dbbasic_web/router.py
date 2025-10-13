@@ -88,6 +88,7 @@ def route(scope: dict, body: bytes = b"") -> tuple[int, list, list]:
         "query": parse_query_string(query_string),
         "form": parse_form_data(body, content_type),
         "cookies": parse_cookies(headers),
+        "headers": headers,
         "body": body,
         "scope": scope,
     })

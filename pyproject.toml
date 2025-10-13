@@ -1,6 +1,6 @@
 [project]
 name = "dbbasic-web"
-version = "0.1.4"
+version = "0.1.6"
 description = "Unixy micro-framework: file routing, SSE/WS, jobs, bus, flat files."
 readme = "README.md"
 requires-python = ">=3.10"
