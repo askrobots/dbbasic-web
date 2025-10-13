@@ -119,15 +119,19 @@ def try_api_handler(path_parts: list[str], request: dict):
     Try to find an API handler, checking from most specific to least specific.
 
     For /user/123/edit:
-    1. Try api/user/123/edit.py
-    2. Try api/user/123.py (pass ['user', '123', 'edit'])
-    3. Try api/user.py (pass ['user', '123', 'edit'])
-    4. Try api.py (pass ['user', '123', 'edit'])
+    1. Try api/user/123/edit.py (exact match)
+    2. Try api/user/123/[xxx].py (pattern match)
+    3. Try api/user/123.py (parent handler)
+    4. Try api/user/[id].py (pattern match)
+    5. Try api/user.py (parent handler)
+    6. Try api.py (root handler)
+
+    Pattern matching: [id], [slug], [name] extract the value and pass as kwarg
     """
     api_dir = BASE_DIR / "api"
 
     if not path_parts:
-        # Root path: try api.py only (skip __init__.py as it's just a package marker)
+        # Root path: try api.py only
         root_handler = BASE_DIR / "api.py"
         if root_handler.exists():
             return load_and_call_handler(root_handler, request)
@@ -135,12 +139,36 @@ def try_api_handler(path_parts: list[str], request: dict):
 
     # Try increasingly general paths
     for i in range(len(path_parts), 0, -1):
-        # Build path to handler
+        # Try exact match first
         partial_path = "/".join(path_parts[:i])
         handler_file = api_dir / f"{partial_path}.py"
 
+        # Try pattern match before exact match fallback
+        # For /tasks/123, when i=2, check api/tasks/[id].py before api/tasks.py
+        parent_parts = path_parts[:i-1]
+        current_segment = path_parts[i-1]
+
+        if parent_parts:
+            parent_dir = api_dir / "/".join(parent_parts)
+        else:
+            parent_dir = api_dir
+
+        if parent_dir.exists() and parent_dir.is_dir():
+            # Find pattern files like [id].py, [slug].py
+            # Must escape brackets in glob: [[]*.py matches literal [
+            for pattern_file in parent_dir.glob("[[]*.py"):
+                # Extract parameter name from [id].py -> id
+                param_name = pattern_file.stem.strip("[]")
+                param_value = current_segment
+
+                request["matched_parts"] = path_parts[:i]
+                request["remaining_parts"] = path_parts[i:]
+                request["path_params"] = {param_name: param_value}
+
+                return load_and_call_handler(pattern_file, request, **{param_name: param_value})
+
+        # Now try exact match as fallback
         if handler_file.exists():
-            # Update request with remaining path parts
             request["matched_parts"] = path_parts[:i]
             request["remaining_parts"] = path_parts[i:]
             return load_and_call_handler(handler_file, request)
@@ -153,8 +181,16 @@ def try_api_handler(path_parts: list[str], request: dict):
     return None
 
 
-def load_and_call_handler(handler_file: Path, request: dict):
-    """Load a Python module and call its handle() function"""
+def load_and_call_handler(handler_file: Path, request: dict, **kwargs):
+    """
+    Load a Python module and call the appropriate handler function.
+
+    Supports two patterns:
+    1. Method-specific functions: GET(request, **kwargs), POST(request, **kwargs), etc.
+    2. Generic handle function: handle(request, **kwargs)
+
+    Method-specific functions take precedence. Falls back to handle() if method function doesn't exist.
+    """
     try:
         spec = importlib.util.spec_from_file_location("handler", handler_file)
         if not spec or not spec.loader:
@@ -163,10 +199,18 @@ def load_and_call_handler(handler_file: Path, request: dict):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        if not hasattr(module, "handle"):
-            return 500, [("content-type", "text/plain")], [b"Handler missing handle() function"]
+        # Try method-specific function first (GET, POST, PUT, DELETE, etc.)
+        method = request.get("method", "GET")
+        method_handler = getattr(module, method, None)
 
-        result = module.handle(request)
+        if method_handler and callable(method_handler):
+            result = method_handler(request, **kwargs)
+        elif hasattr(module, "handle"):
+            # Fall back to generic handle() function
+            result = module.handle(request, **kwargs) if kwargs else module.handle(request)
+        else:
+            # No handler found
+            return 405, [("content-type", "text/plain")], [b"Method Not Allowed"]
 
         # Support various return formats
         if isinstance(result, tuple) and len(result) == 3:
