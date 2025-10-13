@@ -25,11 +25,15 @@ Modern web frameworks moved away from Unix principles and lost key capabilities:
 No route tables. No decorators. Just files:
 
 ```
-api/hello.py        → handles /hello
-api/user.py         → handles /user, /user/123, /user/123/posts
+api/hello.py         → handles /hello
+api/tasks.py         → handles /tasks (collection)
+api/tasks/[id].py    → handles /tasks/123 (item with pattern matching)
+api/users/[username].py → handles /users/alice
 templates/about.html → renders /about
-public/css/app.css  → serves /css/app.css
+public/css/app.css   → serves /css/app.css
 ```
+
+Use method-specific functions (GET, POST, PUT, DELETE) or generic `handle()` function.
 
 ### 2. Hierarchical API Handlers
 Each handler can manage its own sub-routes:
@@ -161,7 +165,7 @@ def handle(request):
 
 Access: `GET /status`
 
-### REST Resource with Sub-Routes
+### REST Resource with Sub-Routes (Classic Pattern)
 
 ```python
 # api/posts.py
@@ -188,6 +192,56 @@ def handle(request):
     elif len(parts) == 3 and parts[2] == 'comments':
         return get_comments(parts[1])
 ```
+
+### Pattern Routing with Method Functions (New in 0.1.7)
+
+Split routes by file structure and HTTP method for cleaner code:
+
+**Collection endpoints:**
+```python
+# api/tasks.py
+def GET(request):
+    """List all tasks"""
+    return json(json.dumps({"tasks": [...]}))
+
+def POST(request):
+    """Create new task"""
+    data = json.loads(request.body)
+    return json(json.dumps({"task": data}), status=201)
+```
+
+**Item endpoints with pattern matching:**
+```python
+# api/tasks/[id].py - matches /tasks/123
+def GET(request, id):
+    """Get single task - id is automatically extracted"""
+    task = tasks.query_one(id=id)
+    return json(json.dumps({"task": task}))
+
+def PUT(request, id):
+    """Update task"""
+    data = json.loads(request.body)
+    tasks.update({'id': id}, data)
+    return json(json.dumps({"success": True}))
+
+def DELETE(request, id):
+    """Delete task"""
+    tasks.delete(id=id)
+    return json(json.dumps({"success": True}))
+```
+
+**Pattern routing works with any parameter name:**
+```
+api/users/[username].py  → /users/alice   → GET(request, username)
+api/posts/[slug].py      → /posts/hello   → GET(request, slug)
+api/@[handle].py         → /@alice        → GET(request, handle)
+```
+
+**Benefits:**
+- File structure mirrors URL structure (`ls api/tasks/` shows available routes)
+- HTTP method = function name (no nested IFs)
+- Parameters extracted from URL and passed as function arguments
+- Backward compatible (old `handle()` pattern still works)
 
 ## Performance
 
@@ -227,6 +281,13 @@ python manage.py worker
 # Interactive shell
 python manage.py shell
 ```
+
+## Examples
+
+See complete working examples at [dbbasic-examples](https://github.com/askrobots/dbbasic-examples):
+- **blog** - Simple blog with posts
+- **microblog** - Twitter-like microblog with follows
+- **api** - REST API with Bearer token auth, demonstrating pattern routing
 
 ## Philosophy in Action
 
