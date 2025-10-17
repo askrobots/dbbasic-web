@@ -174,11 +174,6 @@ def try_api_handler(path_parts: list[str], request: dict):
             request["remaining_parts"] = path_parts[i:]
             return load_and_call_handler(handler_file, request)
 
-    # Try root api handler
-    root_handler = BASE_DIR / "api.py"
-    if root_handler.exists():
-        return load_and_call_handler(root_handler, request)
-
     # Try package handlers as fallback (e.g., dbbasic_admin.api.{path})
     package_result = try_package_handler(path_parts, request)
     if package_result:
