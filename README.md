@@ -1,5 +1,7 @@
 # dbbasic-web
 
+<img src="https://dbbasic.com/static/images/web_coyote.png" alt="Web Coyote Mascot" width="300">
+
 A Unix-philosophy micro-framework that restores the simplicity of CGI while delivering modern performance (~4000 req/s vs 100 req/s for traditional CGI).
 
 ## Philosophy
