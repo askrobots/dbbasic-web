@@ -186,17 +186,20 @@ def try_package_handler(path_parts: list[str], request: dict):
     """
     Try to find a handler in installed packages.
 
-    For /admin/database, tries:
-    1. dbbasic_admin.api.database module
-    2. dbbasic_admin.api.admin.database module
+    For /admin/accounts/users, tries:
+    1. dbbasic_admin.api.accounts.users (admin-provided handler)
+    2. dbbasic_accounts.api.accounts.users (accounts package handler)
 
-    This allows packages like dbbasic-admin to provide default handlers.
+    For /admin/database, tries:
+    1. dbbasic_admin.api.database (admin-provided handler)
+
+    This allows packages like dbbasic-admin to provide default handlers,
+    but also allows other packages to provide their own admin handlers.
     """
     if not path_parts:
         return None
 
-    # For /admin/..., check dbbasic_admin package
-    # For /other/..., check dbbasic_other package
+    # For /admin/..., check dbbasic_admin package first
     first_segment = path_parts[0]
     package_name = f"dbbasic_{first_segment}"
 
@@ -205,7 +208,6 @@ def try_package_handler(path_parts: list[str], request: dict):
         package = importlib.import_module(package_name)
 
         # Build module path: dbbasic_admin.api.database
-        # Remove first segment since it's the package name
         remaining_parts = path_parts[1:] if len(path_parts) > 1 else []
 
         # Try direct API path first: dbbasic_admin.api.database
@@ -223,6 +225,28 @@ def try_package_handler(path_parts: list[str], request: dict):
 
     except ImportError:
         pass
+
+    # If we have /admin/{package}/{path}, try dbbasic_{package} as fallback
+    # E.g., /admin/accounts/users -> dbbasic_accounts.api.accounts.users
+    if first_segment == 'admin' and len(path_parts) >= 2:
+        second_segment = path_parts[1]
+        package_name = f"dbbasic_{second_segment}"
+
+        try:
+            package = importlib.import_module(package_name)
+
+            # Build module path with all remaining parts
+            remaining_parts = path_parts[1:]  # Include the package name in path
+            module_path = f"{package_name}.api.{'.'.join(remaining_parts)}"
+
+            try:
+                module = importlib.import_module(module_path)
+                return load_and_call_package_handler(module, request)
+            except (ImportError, AttributeError):
+                pass
+
+        except ImportError:
+            pass
 
     return None
 
