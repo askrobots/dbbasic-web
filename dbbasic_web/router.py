@@ -1,4 +1,5 @@
 """Filesystem-based routing - like CGI but async"""
+import importlib
 import importlib.util
 import urllib.parse
 from pathlib import Path
@@ -178,7 +179,89 @@ def try_api_handler(path_parts: list[str], request: dict):
     if root_handler.exists():
         return load_and_call_handler(root_handler, request)
 
+    # Try package handlers as fallback (e.g., dbbasic_admin.api.{path})
+    package_result = try_package_handler(path_parts, request)
+    if package_result:
+        return package_result
+
     return None
+
+
+def try_package_handler(path_parts: list[str], request: dict):
+    """
+    Try to find a handler in installed packages.
+
+    For /admin/database, tries:
+    1. dbbasic_admin.api.database module
+    2. dbbasic_admin.api.admin.database module
+
+    This allows packages like dbbasic-admin to provide default handlers.
+    """
+    if not path_parts:
+        return None
+
+    # For /admin/..., check dbbasic_admin package
+    # For /other/..., check dbbasic_other package
+    first_segment = path_parts[0]
+    package_name = f"dbbasic_{first_segment}"
+
+    try:
+        # Try to import the package
+        package = importlib.import_module(package_name)
+
+        # Build module path: dbbasic_admin.api.database
+        # Remove first segment since it's the package name
+        remaining_parts = path_parts[1:] if len(path_parts) > 1 else []
+
+        # Try direct API path first: dbbasic_admin.api.database
+        if remaining_parts:
+            module_path = f"{package_name}.api.{'.'.join(remaining_parts)}"
+        else:
+            # For /admin/ -> dbbasic_admin.api.__init__
+            module_path = f"{package_name}.api"
+
+        try:
+            module = importlib.import_module(module_path)
+            return load_and_call_package_handler(module, request)
+        except (ImportError, AttributeError):
+            pass
+
+    except ImportError:
+        pass
+
+    return None
+
+
+def load_and_call_package_handler(module, request: dict, **kwargs):
+    """
+    Call handler from an imported package module.
+
+    Similar to load_and_call_handler but for already-imported modules.
+    """
+    try:
+        # Try method-specific function first (GET, POST, PUT, DELETE, etc.)
+        method = request.get("method", "GET")
+        method_handler = getattr(module, method, None)
+
+        if method_handler and callable(method_handler):
+            result = method_handler(request, **kwargs)
+        elif hasattr(module, "handle"):
+            # Fall back to generic handle() function
+            result = module.handle(request, **kwargs) if kwargs else module.handle(request)
+        else:
+            # No handler found
+            return None
+
+        # Support various return formats
+        if isinstance(result, tuple) and len(result) == 3:
+            return result
+        else:
+            return 500, [("content-type", "text/plain")], [b"Invalid handler return format"]
+
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        return 500, [("content-type", "text/plain")], [f"Package handler error: {e}\n\n{tb}".encode()]
 
 
 def load_and_call_handler(handler_file: Path, request: dict, **kwargs):
